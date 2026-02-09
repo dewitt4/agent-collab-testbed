@@ -1,3 +1,21 @@
+# Auto-approve docs-only PRs
+#
+# This workflow automatically approves pull requests labeled with 'docs-only'
+# if they only modify documentation files (*.md, *.txt, docs/*, LICENSE).
+#
+# Purpose: Streamline the review process for documentation changes in the
+# agent-collab testbed, allowing agents to make quick documentation updates
+# without manual review when appropriately labeled.
+#
+# How it works:
+# 1. Triggered when a PR is opened, synchronized, or labeled
+# 2. Checks if the 'docs-only' label is present
+# 3. Verifies that only documentation files were modified
+# 4. Auto-approves the PR if verification passes
+#
+# Security: Uses pull_request_target to access secrets with elevated permissions,
+# necessary for the workflow to approve PRs on behalf of the repository.
+
 name: Auto-approve docs-only PRs
 
 on:
@@ -10,6 +28,7 @@ permissions:
 jobs:
   auto-approve-docs:
     runs-on: ubuntu-latest
+    # Only run if the PR has the 'docs-only' label
     if: contains(github.event.pull_request.labels.*.name, 'docs-only')
     steps:
       - name: Check if only docs changed
@@ -17,11 +36,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Get the list of changed files in the PR
           FILES=$(gh pr diff "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --name-only)
           echo "Changed files:"
           echo "$FILES"
-          # Allow: *.md, docs/*, LICENSE, *.txt
+          
+          # Filter out documentation files (*.md, *.txt, docs/*, LICENSE)
+          # Any remaining files are non-documentation files
           NON_DOC=$(echo "$FILES" | grep -vE '\.(md|txt)$' | grep -vE '^docs/' | grep -vE '^LICENSE$' || true)
+          
+          # Set output based on whether non-doc files were found
           if [ -z "$NON_DOC" ]; then
             echo "docs_only=true" >> "$GITHUB_OUTPUT"
           else
@@ -30,6 +54,7 @@ jobs:
           fi
 
       - name: Auto-approve
+        # Only approve if the verification confirmed docs-only changes
         if: steps.check.outputs.docs_only == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
